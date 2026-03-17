@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>حروف - لعبة الحروف العربية</title>
+  <meta name="description" content="لعبة حروف التفاعلية - تنافس بين فريقين على لوحة الحروف العربية" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ═══════ LOBBY SCREEN ═══════ -->
+  <div id="lobby" class="screen">
+    <div class="lobby-container">
+      <div class="lobby-logo">
+        <span class="logo-letter logo-green">ح</span>
+        <span class="logo-letter logo-orange">ر</span>
+        <span class="logo-letter logo-green">و</span>
+        <span class="logo-letter logo-orange">ف</span>
+      </div>
+      <p class="lobby-subtitle">لعبة الحروف التفاعلية</p>
+
+      <div class="lobby-form">
+        <input type="text" id="nameInput" placeholder="اكتب اسمك..." autocomplete="off" />
+
+        <p class="role-label">اختر دورك:</p>
+        <div class="role-buttons">
+          <button class="role-btn green-btn" data-team="green" data-role="player">
+            <span class="role-icon">🟢</span>
+            الفريق الأخضر
+          </button>
+          <button class="role-btn orange-btn" data-team="orange" data-role="player">
+            <span class="role-icon">🟠</span>
+            الفريق البرتقالي
+          </button>
+          <button class="role-btn referee-btn" data-team="" data-role="referee">
+            <span class="role-icon">⚖️</span>
+            الحكم
+          </button>
+          <button class="role-btn display-btn" data-team="" data-role="display">
+            <span class="role-icon">📺</span>
+            شاشة العرض
+          </button>
+        </div>
+      </div>
+
+      <div id="lobbyPlayers" class="lobby-players">
+        <h3>اللاعبون المتصلون</h3>
+        <div id="playersList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ GAME SCREEN ═══════ -->
+  <div id="game" class="screen hidden">
+    <!-- Status Bar -->
+    <div id="statusBar" class="status-bar">
+      <span id="statusText">في انتظار الحكم...</span>
+      <button id="leaveBtn" class="leave-btn">🚪 خروج</button>
+    </div>
+
+    <!-- ── REFEREE VIEW ── -->
+    <div id="refereeView" class="view-container hidden">
+      <div class="board-section">
+        <div class="team-indicator" id="turnIndicator"></div>
+        <svg id="hexBoard" class="hex-board" viewBox="0 0 480 500"></svg>
+      </div>
+      <div class="controls-section">
+        <div id="refLampArea" class="lamp-area">
+          <div id="refLamp" class="lamp"></div>
+          <p id="refLampText" class="lamp-text"></p>
+        </div>
+        <div id="refTimerArea" class="timer-area hidden">
+          <div class="timer-ring">
+            <svg class="timer-svg" viewBox="0 0 120 120">
+              <circle class="timer-bg" cx="60" cy="60" r="52" />
+              <circle class="timer-progress ref-timer-circle" cx="60" cy="60" r="52" />
+            </svg>
+            <span class="timer-text ref-timer-text">5</span>
+          </div>
+        </div>
+
+        <div id="questionBox" class="question-box hidden">
+          <p id="questionText" class="question-text"></p>
+          <p id="answerText" class="answer-text"></p>
+        </div>
+        <div id="refereeControls" class="referee-controls">
+          <button id="startGameBtn" class="ref-btn start-btn">🎮 ابدأ اللعبة</button>
+          <div id="judgeControls" class="judge-controls hidden">
+            <button id="correctBtn" class="ref-btn correct-btn">✅ صحيحة</button>
+            <button id="incorrectBtn" class="ref-btn incorrect-btn">❌ خاطئة</button>
+          </div>
+          <button id="startSecondBtn" class="ref-btn second-btn hidden">▶️ ابدأ الوقت للفريق الآخر</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PLAYER VIEW ── -->
+    <div id="playerView" class="view-container hidden">
+      <div class="player-center">
+        <div id="playerLampArea" class="lamp-area lamp-area-large">
+          <div id="playerLamp" class="lamp lamp-large"></div>
+          <p id="playerLampText" class="lamp-text lamp-text-large"></p>
+        </div>
+        <div id="playerTimerArea" class="timer-area timer-area-large hidden">
+          <div class="timer-ring timer-ring-large">
+            <svg class="timer-svg" viewBox="0 0 120 120">
+              <circle class="timer-bg" cx="60" cy="60" r="52" />
+              <circle class="timer-progress player-timer-circle" cx="60" cy="60" r="52" />
+            </svg>
+            <span class="timer-text player-timer-text">5</span>
+          </div>
+        </div>
+        <button id="buzzBtn" class="buzz-btn hidden">
+          <span class="buzz-icon">🔔</span>
+          <span>ضغط!</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── DISPLAY VIEW (TV) ── -->
+    <div id="displayView" class="view-container hidden">
+      <div class="display-layout">
+        <div class="board-section">
+          <div class="team-indicator" id="displayTurnIndicator"></div>
+          <svg id="displayHexBoard" class="hex-board hex-board-large" viewBox="0 0 480 500"></svg>
+        </div>
+        <div class="display-bottom">
+          <div id="displayLampArea" class="lamp-area lamp-area-large">
+            <div id="displayLamp" class="lamp lamp-large"></div>
+            <p id="displayLampText" class="lamp-text lamp-text-large"></p>
+          </div>
+          <div id="displayTimerArea" class="timer-area timer-area-large hidden">
+            <div class="timer-ring timer-ring-large">
+              <svg class="timer-svg" viewBox="0 0 120 120">
+                <circle class="timer-bg" cx="60" cy="60" r="52" />
+                <circle class="timer-progress display-timer-circle" cx="60" cy="60" r="52" />
+              </svg>
+              <span class="timer-text display-timer-text">5</span>
+            </div>
+          </div>
+        </div>
+        <div id="scoreboard" class="scoreboard">
+          <div class="score-team score-green">
+            <h3>🟢 الأخضر</h3>
+            <div id="greenScores" class="score-list"></div>
+          </div>
+          <div class="score-team score-orange">
+            <h3>🟠 البرتقالي</h3>
+            <div id="orangeScores" class="score-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
