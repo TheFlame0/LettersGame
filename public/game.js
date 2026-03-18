@@ -94,14 +94,14 @@ function buildBoardSVG(svgEl, clickable) {
 
   for (let r = -1; r <= 5; r++) {
     const isOffsetRow = Math.abs(r) % 2 === 1; // Alternating rows are shifted right
-    
+
     // Base X offset + shift for odd rows
     const offsetX = COL_STEP + (isOffsetRow ? COL_STEP / 2 : 0) + 10;
 
     for (let c = -1; c <= 5; c++) {
       const cx = offsetX + (c + 1) * COL_STEP;
       const cy = HEX_SIZE + 20 + (r + 1) * ROW_STEP;
-      
+
       const isPlayable = (r >= 0 && r < 5 && c >= 0 && c < 5);
 
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -318,7 +318,7 @@ function renderPlayer() {
   if (state.phase === 'LOBBY') {
     waitingRoomOverlay.classList.remove('hidden');
     playerActiveView.classList.add('hidden');
-    
+
     waitingPlayerName.textContent = `مرحباً يا ${myInfo.name}!`;
     waitingTeamBadge.textContent = myInfo.team === 'green' ? 'الفريق الأخضر' : 'الفريق البرتقالي';
     waitingTeamBadge.className = `team-badge ${myInfo.team}`;
@@ -343,7 +343,7 @@ function renderDisplay() {
   if (state.phase === 'LOBBY') {
     tvLobbyScreen.classList.remove('hidden');
     displayActiveView.classList.add('hidden');
-    
+
     // Render joined players in TV lobby
     const greens = [], oranges = [];
     Object.values(state.players).forEach(p => {
@@ -352,7 +352,7 @@ function renderDisplay() {
     });
     tvLobbyGreen.innerHTML = greens.map(p => `<div class="player-tag">${p.name}</div>`).join('');
     tvLobbyOrange.innerHTML = oranges.map(p => `<div class="player-tag">${p.name}</div>`).join('');
-    
+
     return; // Don't render board
   } else {
     tvLobbyScreen.classList.add('hidden');
@@ -407,7 +407,7 @@ function updateStatus() {
     case 'IDLE':
       if (myInfo.role !== 'referee' && myInfo.role !== 'display') {
         if (myInfo.team === state.currentTeam) {
-          statusText.textContent = `🎯 دور فريقك! تواصلوا مع الحكم لاختيار حرف`;
+          statusText.textContent = `🎯 دور فريقك! اختاروا حرف`;
         } else {
           statusText.textContent = `🚫 دور الفريق الآخر. انتظروا اختيارهم`;
         }
@@ -421,7 +421,7 @@ function updateStatus() {
       statusText.textContent = `⏱️ ${b ? b.name : 'الفريق ' + tn(state.buzzedTeam)} يجاوب — ٥ ثوان!`;
       break;
     }
-    case 'REFEREE_DECISION':statusText.textContent = `⚖️ الحكم يقرر — تمرير أو تخطي؟`; break;
+    case 'REFEREE_DECISION': statusText.textContent = `⚖️ الحكم يقرر — تمرير أو تخطي؟`; break;
     case 'GAME_OVER': {
       statusText.innerHTML = `🎉🎉 اللعبة انتهت! بطل حروف هو <b>الفريق ${tn(state.winner)}</b> 🎉🎉`;
       break;
@@ -468,10 +468,10 @@ function showToast(msg, type = 'success') {
 socket.on('game_state', (newState) => {
   const oldPhase = state ? state.phase : null;
   state = newState;
-  
+
   if (oldPhase === 'ANSWERING' && state.phase === 'IDLE') showToast('إجابة صحيحة!', 'success');
   if (oldPhase === 'ANSWERING' && state.phase === 'REFEREE_DECISION') showToast('إجابة خاطئة', 'error');
-  
+
   if (myInfo) render();
   renderLobbyPlayers(state.players);
 });
