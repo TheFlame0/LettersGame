@@ -89,17 +89,37 @@
         </div>
         <div id="refereeControls" class="referee-controls">
           <button id="startGameBtn" class="ref-btn start-btn">🎮 ابدأ اللعبة</button>
+
+          <!-- During ANSWERING: Correct / Wrong -->
           <div id="judgeControls" class="judge-controls hidden">
             <button id="correctBtn" class="ref-btn correct-btn">✅ صحيحة</button>
             <button id="incorrectBtn" class="ref-btn incorrect-btn">❌ خاطئة</button>
           </div>
-          <button id="startSecondBtn" class="ref-btn second-btn hidden">▶️ ابدأ الوقت للفريق الآخر</button>
+
+          <!-- During REFEREE_DECISION: Pass / Skip -->
+          <div id="decisionControls" class="judge-controls hidden">
+            <button id="passBtn" class="ref-btn second-btn">➡️ تمرير للفريق الآخر</button>
+            <button id="skipBtn" class="ref-btn incorrect-btn">⏭️ تخطي الحرف</button>
+          </div>
+
+          <!-- During BUZZING or REFEREE_DECISION: Change Question -->
+          <button id="changeQuestionBtn" class="ref-btn change-question-btn hidden">🔄 تغيير السؤال</button>
         </div>
       </div>
     </div>
 
     <!-- ── PLAYER VIEW ── -->
     <div id="playerView" class="view-container hidden">
+      <!-- Waiting Room Overlay -->
+      <div id="waitingRoomOverlay" class="waiting-room hidden">
+        <div class="waiting-card">
+          <h2 id="waitingPlayerName">مرحباً!</h2>
+          <div id="waitingTeamBadge" class="team-badge">الفريق</div>
+          <p class="waiting-msg">الرجاء انتظار الحكم لبدء اللعبة ⏳</p>
+          <div class="spinner"></div>
+        </div>
+      </div>
+      
       <div class="player-center">
         <div id="playerLampArea" class="lamp-area lamp-area-large">
           <div id="playerLamp" class="lamp lamp-large"></div>
@@ -123,38 +143,69 @@
 
     <!-- ── DISPLAY VIEW (TV) ── -->
     <div id="displayView" class="view-container hidden">
-      <div class="display-layout">
-        <div class="board-section">
-          <div class="team-indicator" id="displayTurnIndicator"></div>
-          <svg id="displayHexBoard" class="hex-board hex-board-large" viewBox="0 0 480 500"></svg>
-        </div>
-        <div class="display-bottom">
-          <div id="displayLampArea" class="lamp-area lamp-area-large">
-            <div id="displayLamp" class="lamp lamp-large"></div>
-            <p id="displayLampText" class="lamp-text lamp-text-large"></p>
+      <!-- TV Lobby Screen -->
+      <div id="tvLobbyScreen" class="tv-lobby hidden">
+        <h1 class="tv-lobby-title">انضموا الآن عبر الرابط! 📱</h1>
+        <p class="tv-lobby-subtitle">بانتظار اكتمال الفرق لبدء تحدي حروف</p>
+        <div class="tv-lobby-teams">
+          <div class="tv-team-col tv-orange">
+            <h2>🟠 البرتقالي</h2>
+            <div id="tvLobbyOrange" class="tv-player-list"></div>
           </div>
-          <div id="displayTimerArea" class="timer-area timer-area-large hidden">
-            <div class="timer-ring timer-ring-large">
-              <svg class="timer-svg" viewBox="0 0 120 120">
-                <circle class="timer-bg" cx="60" cy="60" r="52" />
-                <circle class="timer-progress display-timer-circle" cx="60" cy="60" r="52" />
-              </svg>
-              <span class="timer-text display-timer-text">5</span>
-            </div>
+          <div class="tv-team-col tv-green">
+            <h2>🟢 الأخضر</h2>
+            <div id="tvLobbyGreen" class="tv-player-list"></div>
           </div>
         </div>
-        <div id="scoreboard" class="scoreboard">
-          <div class="score-team score-green">
-            <h3>🟢 الأخضر</h3>
-            <div id="greenScores" class="score-list"></div>
-          </div>
+      </div>
+
+      <div id="displayActiveView" class="display-layout">
+        <!-- Left: Orange Team -->
+        <div class="score-panel score-panel-left">
           <div class="score-team score-orange">
             <h3>🟠 البرتقالي</h3>
             <div id="orangeScores" class="score-list"></div>
           </div>
         </div>
+
+        <!-- Center: Board + Lamp + Timer -->
+        <div class="display-center">
+          <div class="board-section">
+            <div class="team-indicator" id="displayTurnIndicator"></div>
+            <svg id="displayHexBoard" class="hex-board hex-board-large" viewBox="0 0 480 500"></svg>
+          </div>
+          <div class="display-bottom">
+            <div id="displayLampArea" class="lamp-area lamp-area-large">
+              <div id="displayLamp" class="lamp lamp-large"></div>
+              <p id="displayLampText" class="lamp-text lamp-text-large"></p>
+            </div>
+            <div id="displayTimerArea" class="timer-area timer-area-large hidden">
+              <div class="timer-ring timer-ring-large">
+                <svg class="timer-svg" viewBox="0 0 120 120">
+                  <circle class="timer-bg" cx="60" cy="60" r="52" />
+                  <circle class="timer-progress display-timer-circle" cx="60" cy="60" r="52" />
+                </svg>
+                <span class="timer-text display-timer-text">5</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Green Team -->
+        <div class="score-panel score-panel-right">
+          <div class="score-team score-green">
+            <h3>🟢 الأخضر</h3>
+            <div id="greenScores" class="score-list"></div>
+          </div>
+        </div>
       </div>
     </div>
+  </div>
+
+  <!-- Global Toast Notification -->
+  <div id="toastNotification" class="toast hidden">
+    <span id="toastIcon"></span>
+    <span id="toastMessage"></span>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>

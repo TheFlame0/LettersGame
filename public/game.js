@@ -30,7 +30,10 @@ const startGameBtn = document.getElementById('startGameBtn');
 const judgeControls = document.getElementById('judgeControls');
 const correctBtn = document.getElementById('correctBtn');
 const incorrectBtn = document.getElementById('incorrectBtn');
-const startSecondBtn = document.getElementById('startSecondBtn');
+const decisionControls = document.getElementById('decisionControls');
+const passBtn = document.getElementById('passBtn');
+const skipBtn = document.getElementById('skipBtn');
+const changeQuestionBtn = document.getElementById('changeQuestionBtn');
 
 // Player
 const playerLamp = document.getElementById('playerLamp');
@@ -46,6 +49,21 @@ const displayLampText = document.getElementById('displayLampText');
 const displayTimerArea = document.getElementById('displayTimerArea');
 const greenScores = document.getElementById('greenScores');
 const orangeScores = document.getElementById('orangeScores');
+
+// UX Overlays
+const waitingRoomOverlay = document.getElementById('waitingRoomOverlay');
+const waitingPlayerName = document.getElementById('waitingPlayerName');
+const waitingTeamBadge = document.getElementById('waitingTeamBadge');
+const playerActiveView = document.querySelector('.player-center');
+
+const tvLobbyScreen = document.getElementById('tvLobbyScreen');
+const displayActiveView = document.getElementById('displayActiveView');
+const tvLobbyOrange = document.getElementById('tvLobbyOrange');
+const tvLobbyGreen = document.getElementById('tvLobbyGreen');
+
+const toastNotification = document.getElementById('toastNotification');
+const toastIcon = document.getElementById('toastIcon');
+const toastMessage = document.getElementById('toastMessage');
 
 // 5x5 slanted block = 25 letters
 const BOARD_LAYOUT = [5, 5, 5, 5, 5];
@@ -189,7 +207,9 @@ buzzBtn.addEventListener('click', () => socket.emit('buzz'));
 startGameBtn.addEventListener('click', () => socket.emit('start_game'));
 correctBtn.addEventListener('click', () => socket.emit('judge', true));
 incorrectBtn.addEventListener('click', () => socket.emit('judge', false));
-startSecondBtn.addEventListener('click', () => socket.emit('start_second_timer'));
+passBtn.addEventListener('click', () => socket.emit('pass_to_other'));
+skipBtn.addEventListener('click', () => socket.emit('skip_letter'));
+changeQuestionBtn.addEventListener('click', () => socket.emit('change_question'));
 
 // ─── Timer ───
 const TIMER_CIRCUMFERENCE = 2 * Math.PI * 52;
@@ -252,7 +272,7 @@ function render() {
   updateStatus();
 
   // Timer
-  const isTimerPhase = state.phase === 'ANSWERING_FIRST' || state.phase === 'ANSWERING_SECOND';
+  const isTimerPhase = state.phase === 'ANSWERING';
   if (isTimerPhase) startTimerUI();
   else stopTimerUI();
 }
@@ -271,13 +291,14 @@ function renderReferee() {
   setLamp(refLamp, refLampText);
 
   // Timer
-  const isTimerPhase = state.phase === 'ANSWERING_FIRST' || state.phase === 'ANSWERING_SECOND';
+  const isTimerPhase = state.phase === 'ANSWERING';
   refTimerArea.classList.toggle('hidden', !isTimerPhase);
 
-  // Controls
+  // Controls visibility
   startGameBtn.classList.toggle('hidden', state.phase !== 'LOBBY');
-  judgeControls.classList.toggle('hidden', !isTimerPhase);
-  startSecondBtn.classList.toggle('hidden', state.phase !== 'READING_SECOND');
+  judgeControls.classList.toggle('hidden', state.phase !== 'ANSWERING' && state.phase !== 'REFEREE_DECISION');
+  decisionControls.classList.toggle('hidden', state.phase !== 'REFEREE_DECISION');
+  changeQuestionBtn.classList.toggle('hidden', state.phase !== 'BUZZING' && state.phase !== 'REFEREE_DECISION');
 
   // Question Box
   const qBox = document.getElementById('questionBox');
@@ -294,11 +315,24 @@ function renderReferee() {
 }
 
 function renderPlayer() {
+  if (state.phase === 'LOBBY') {
+    waitingRoomOverlay.classList.remove('hidden');
+    playerActiveView.classList.add('hidden');
+    
+    waitingPlayerName.textContent = `مرحباً يا ${myInfo.name}!`;
+    waitingTeamBadge.textContent = myInfo.team === 'green' ? 'الفريق الأخضر' : 'الفريق البرتقالي';
+    waitingTeamBadge.className = `team-badge ${myInfo.team}`;
+    return; // Stop rendering active view
+  } else {
+    waitingRoomOverlay.classList.add('hidden');
+    playerActiveView.classList.remove('hidden');
+  }
+
   // Lamp
   setLamp(playerLamp, playerLampText);
 
   // Timer
-  const isTimerPhase = state.phase === 'ANSWERING_FIRST' || state.phase === 'ANSWERING_SECOND';
+  const isTimerPhase = state.phase === 'ANSWERING';
   playerTimerArea.classList.toggle('hidden', !isTimerPhase);
 
   // Buzz button
@@ -306,6 +340,25 @@ function renderPlayer() {
 }
 
 function renderDisplay() {
+  if (state.phase === 'LOBBY') {
+    tvLobbyScreen.classList.remove('hidden');
+    displayActiveView.classList.add('hidden');
+    
+    // Render joined players in TV lobby
+    const greens = [], oranges = [];
+    Object.values(state.players).forEach(p => {
+      if (p.team === 'green') greens.push(p);
+      if (p.team === 'orange') oranges.push(p);
+    });
+    tvLobbyGreen.innerHTML = greens.map(p => `<div class="player-tag">${p.name}</div>`).join('');
+    tvLobbyOrange.innerHTML = oranges.map(p => `<div class="player-tag">${p.name}</div>`).join('');
+    
+    return; // Don't render board
+  } else {
+    tvLobbyScreen.classList.add('hidden');
+    displayActiveView.classList.remove('hidden');
+  }
+
   buildBoardSVG(displayHexBoard, false);
 
   // Turn indicator
@@ -319,7 +372,7 @@ function renderDisplay() {
   setLamp(displayLamp, displayLampText);
 
   // Timer
-  const isTimerPhase = state.phase === 'ANSWERING_FIRST' || state.phase === 'ANSWERING_SECOND';
+  const isTimerPhase = state.phase === 'ANSWERING';
   displayTimerArea.classList.toggle('hidden', !isTimerPhase);
 
   // Scoreboard
@@ -337,7 +390,7 @@ function setLamp(lampEl, textEl) {
     return;
   }
 
-  if (state.phase === 'ANSWERING_FIRST' || state.phase === 'ANSWERING_SECOND' || state.phase === 'READING_SECOND') {
+  if (state.phase === 'ANSWERING' || state.phase === 'REFEREE_DECISION') {
     lampEl.classList.add(state.buzzedTeam);
     if (state.buzzedPlayer && state.players[state.buzzedPlayer]) {
       textEl.textContent = state.players[state.buzzedPlayer].name;
@@ -351,15 +404,24 @@ function updateStatus() {
   const tn = (t) => t === 'green' ? 'الأخضر' : 'البرتقالي';
   switch (state.phase) {
     case 'LOBBY': statusText.textContent = '🏠 في انتظار بدء اللعبة...'; break;
-    case 'IDLE': statusText.textContent = `📝 دور الفريق ${tn(state.currentTeam)} — اختاروا حرفاً`; break;
+    case 'IDLE':
+      if (myInfo.role !== 'referee' && myInfo.role !== 'display') {
+        if (myInfo.team === state.currentTeam) {
+          statusText.textContent = `🎯 دور فريقك! تواصلوا مع الحكم لاختيار حرف`;
+        } else {
+          statusText.textContent = `🚫 دور الفريق الآخر. انتظروا اختيارهم`;
+        }
+      } else {
+        statusText.textContent = `📝 دور الفريق ${tn(state.currentTeam)} — اختاروا حرفاً`;
+      }
+      break;
     case 'BUZZING': statusText.textContent = '🔔 الحكم يقرأ السؤال — اضغط الزر!'; break;
-    case 'ANSWERING_FIRST': {
+    case 'ANSWERING': {
       const b = state.players[state.buzzedPlayer];
-      statusText.textContent = `⏱️ ${b ? b.name : ''} يجاوب — ٥ ثوان!`;
+      statusText.textContent = `⏱️ ${b ? b.name : 'الفريق ' + tn(state.buzzedTeam)} يجاوب — ٥ ثوان!`;
       break;
     }
-    case 'READING_SECOND':statusText.textContent = `📖 الحكم يعيد السؤال للفريق ${tn(state.buzzedTeam)}`; break;
-    case 'ANSWERING_SECOND': statusText.textContent = `⏱️ الفريق ${tn(state.buzzedTeam)} يجاوب — ٥ ثوان!`; break;
+    case 'REFEREE_DECISION':statusText.textContent = `⚖️ الحكم يقرر — تمرير أو تخطي؟`; break;
     case 'GAME_OVER': {
       statusText.innerHTML = `🎉🎉 اللعبة انتهت! بطل حروف هو <b>الفريق ${tn(state.winner)}</b> 🎉🎉`;
       break;
@@ -392,9 +454,24 @@ function renderLobbyPlayers(players) {
   }).join('');
 }
 
+function showToast(msg, type = 'success') {
+  if (!toastNotification) return;
+  toastIcon.textContent = type === 'success' ? '✅' : '❌';
+  toastMessage.textContent = msg;
+  toastNotification.className = `toast show ${type}`;
+  setTimeout(() => {
+    toastNotification.classList.remove('show');
+  }, 2500);
+}
+
 // ─── Socket ───
 socket.on('game_state', (newState) => {
+  const oldPhase = state ? state.phase : null;
   state = newState;
+  
+  if (oldPhase === 'ANSWERING' && state.phase === 'IDLE') showToast('إجابة صحيحة!', 'success');
+  if (oldPhase === 'ANSWERING' && state.phase === 'REFEREE_DECISION') showToast('إجابة خاطئة', 'error');
+  
   if (myInfo) render();
   renderLobbyPlayers(state.players);
 });

@@ -64,14 +64,9 @@ function getPublicState() {
 function startTimer() {
   gameState.timerEnd = Date.now() + 5000;
   gameState.timer = setTimeout(() => {
-    if (gameState.phase === 'ANSWERING_FIRST') {
-      gameState.phase = 'READING_SECOND';
-      gameState.buzzedTeam = gameState.buzzedTeam === 'green' ? 'orange' : 'green';
-      gameState.buzzedPlayer = null;
-      gameState.timerEnd = null;
-    } else if (gameState.phase === 'ANSWERING_SECOND') {
-      resetTurn();
-    }
+    // Timer expired — hand control to referee (no auto-pass)
+    gameState.phase = 'REFEREE_DECISION';
+    gameState.timerEnd = null;
     io.emit('game_state', getPublicState());
   }, 5000);
 }
@@ -217,7 +212,7 @@ io.on('connection', (socket) => {
     if (!p || p.role === 'referee') return;
     gameState.buzzedPlayer = socket.id;
     gameState.buzzedTeam = p.team;
-    gameState.phase = 'ANSWERING_FIRST';
+    gameState.phase = 'ANSWERING';
     startTimer();
     io.emit('game_state', getPublicState());
   });
@@ -225,6 +220,7 @@ io.on('connection', (socket) => {
   socket.on('judge', (correct) => {
     const p = gameState.players[socket.id];
     if (!p || p.role !== 'referee') return;
+    if (gameState.phase !== 'ANSWERING' && gameState.phase !== 'REFEREE_DECISION') return;
 
     clearTimer();
 
@@ -235,27 +231,48 @@ io.on('connection', (socket) => {
       }
       checkWinner();
       if (gameState.phase !== 'GAME_OVER') {
-        resetTurn(gameState.buzzedTeam); // The answering team got it right, they keep the turn
+        resetTurn(gameState.buzzedTeam);
       }
     } else {
-      if (gameState.phase === 'ANSWERING_FIRST') {
-        gameState.phase = 'READING_SECOND';
-        gameState.buzzedTeam = gameState.buzzedTeam === 'green' ? 'orange' : 'green';
-        gameState.buzzedPlayer = null;
-        gameState.timerEnd = null;
-      } else if (gameState.phase === 'ANSWERING_SECOND') {
-        resetTurn();
-      }
+      // Wrong — go to REFEREE_DECISION, referee decides what to do next
+      gameState.phase = 'REFEREE_DECISION';
+      gameState.timerEnd = null;
     }
     io.emit('game_state', getPublicState());
   });
 
-  socket.on('start_second_timer', () => {
+  // Referee passes the question to the other team
+  socket.on('pass_to_other', () => {
     const p = gameState.players[socket.id];
     if (!p || p.role !== 'referee') return;
-    if (gameState.phase !== 'READING_SECOND') return;
-    gameState.phase = 'ANSWERING_SECOND';
+    if (gameState.phase !== 'REFEREE_DECISION') return;
+
+    gameState.buzzedTeam = gameState.buzzedTeam === 'green' ? 'orange' : 'green';
+    gameState.buzzedPlayer = null;
+    gameState.phase = 'ANSWERING';
     startTimer();
+    io.emit('game_state', getPublicState());
+  });
+
+  // Referee skips the letter entirely (no team wins it)
+  socket.on('skip_letter', () => {
+    const p = gameState.players[socket.id];
+    if (!p || p.role !== 'referee') return;
+    if (gameState.phase !== 'REFEREE_DECISION') return;
+
+    resetTurn(); // no winner, flip turn
+    io.emit('game_state', getPublicState());
+  });
+
+  // Referee changes the question for the current letter
+  socket.on('change_question', () => {
+    const p = gameState.players[socket.id];
+    if (!p || p.role !== 'referee') return;
+    if (!gameState.currentLetter && gameState.currentLetter !== 0) return;
+
+    const letterChar = gameState.board[gameState.currentLetter].letter;
+    const letterQuestions = questionsData[letterChar] || [{ q: `سؤال لحرف ${letterChar}`, a: letterChar }];
+    gameState.currentQuestion = letterQuestions[Math.floor(Math.random() * letterQuestions.length)];
     io.emit('game_state', getPublicState());
   });
 
