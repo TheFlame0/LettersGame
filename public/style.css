@@ -455,6 +455,8 @@ body {
 .second-btn:hover { transform: translateY(-2px); }
 .change-question-btn { background: linear-gradient(135deg, #7c3aed, #a855f7); box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3); width: 100%; margin-top: 5px; }
 .change-question-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5); }
+.reset-btn { background: linear-gradient(135deg, #2563eb, #3b82f6); box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3); width: 100%; margin-top: 20px; border: 1px solid rgba(255,255,255,0.1); }
+.reset-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5); border-color: rgba(255,255,255,0.3); }
 
 /* ═══════ DISPLAY VIEW ═══════ */
 .display-layout {
@@ -500,6 +502,7 @@ body {
 }
 
 .score-team h3 { text-align: center; font-size: 15px; margin-bottom: 10px; }
+.rounds-won { text-align: center; font-size: 20px; font-weight: 900; color: var(--gold); margin-bottom: 12px; padding: 4px; background: rgba(0,0,0,0.2); border-radius: 8px; }
 .score-green { border-color: rgba(22, 163, 74, 0.3); }
 .score-orange { border-color: rgba(234, 88, 12, 0.3); }
 

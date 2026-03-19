@@ -37,6 +37,7 @@ let gameState = {
   timer: null,
   timerEnd: null,
   winner: null,
+  roundWins: { green: 0, orange: 0 },
 };
 
 function initBoard() {
@@ -56,8 +57,10 @@ function getPublicState() {
     currentTeam: gameState.currentTeam,
     buzzedPlayer: gameState.buzzedPlayer,
     buzzedTeam: gameState.buzzedTeam,
-    timerEnd: gameState.timerEnd,
     winner: gameState.winner,
+    roundWins: gameState.roundWins,
+    timerEnd: gameState.timerEnd,
+    serverTime: Date.now(),
   };
 }
 
@@ -146,12 +149,28 @@ function checkWinner() {
     return false;
   };
 
+  let roundWinner = null;
   if (hasPath('green', (r, c) => c === 4)) {
-    gameState.winner = 'green';
-    gameState.phase = 'GAME_OVER';
+    roundWinner = 'green';
   } else if (hasPath('orange', (r, c) => r === 4)) {
-    gameState.winner = 'orange';
-    gameState.phase = 'GAME_OVER';
+    roundWinner = 'orange';
+  }
+
+  if (roundWinner) {
+    gameState.roundWins[roundWinner]++;
+    
+    // Check if total game winner
+    if (gameState.roundWins[roundWinner] >= 3) {
+      gameState.winner = roundWinner;
+      gameState.phase = 'GAME_OVER';
+    } else {
+      // Refresh board for new round but keep overall state
+      initBoard();
+      // Round winner starts the next round?
+      gameState.currentTeam = roundWinner; 
+      gameState.phase = 'IDLE'; 
+      // Individual player scores are NOT reset here (as per user: "still show how many a player answer how many question")
+    }
   }
 }
 
@@ -282,7 +301,9 @@ io.on('connection', (socket) => {
     clearTimer();
     initBoard();
     // Reset scores
+    // Reset all
     Object.values(gameState.players).forEach(pl => pl.score = 0);
+    gameState.roundWins = { green: 0, orange: 0 };
     gameState.phase = 'LOBBY';
     gameState.currentLetter = null;
     gameState.currentQuestion = null;
@@ -290,6 +311,7 @@ io.on('connection', (socket) => {
     gameState.buzzedPlayer = null;
     gameState.buzzedTeam = null;
     gameState.winner = null;
+    initBoard();
     io.emit('game_state', getPublicState());
   });
 

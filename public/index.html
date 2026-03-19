@@ -104,6 +104,9 @@
 
           <!-- During BUZZING or REFEREE_DECISION: Change Question -->
           <button id="changeQuestionBtn" class="ref-btn change-question-btn hidden">🔄 تغيير السؤال</button>
+
+          <!-- Always visible/available: New Game (Reset) -->
+          <button id="resetGameBtn" class="ref-btn reset-btn">🆕 لعبة جديدة</button>
         </div>
       </div>
     </div>
@@ -164,6 +167,7 @@
         <div class="score-panel score-panel-left">
           <div class="score-team score-orange">
             <h3>🟠 البرتقالي</h3>
+            <div id="orangeRounds" class="rounds-won">الانتصارات: 0</div>
             <div id="orangeScores" class="score-list"></div>
           </div>
         </div>
@@ -195,6 +199,7 @@
         <div class="score-panel score-panel-right">
           <div class="score-team score-green">
             <h3>🟢 الأخضر</h3>
+            <div id="greenRounds" class="rounds-won">الانتصارات: 0</div>
             <div id="greenScores" class="score-list"></div>
           </div>
         </div>

@@ -7,6 +7,7 @@ const socket = io();
 let myInfo = null;
 let state = null;
 let timerInterval = null;
+let serverOffset = 0; // ms difference between server and client clock
 
 // ─── DOM ───
 const lobbyScreen = document.getElementById('lobby');
@@ -34,6 +35,7 @@ const decisionControls = document.getElementById('decisionControls');
 const passBtn = document.getElementById('passBtn');
 const skipBtn = document.getElementById('skipBtn');
 const changeQuestionBtn = document.getElementById('changeQuestionBtn');
+const resetGameBtn = document.getElementById('resetGameBtn');
 
 // Player
 const playerLamp = document.getElementById('playerLamp');
@@ -49,6 +51,8 @@ const displayLampText = document.getElementById('displayLampText');
 const displayTimerArea = document.getElementById('displayTimerArea');
 const greenScores = document.getElementById('greenScores');
 const orangeScores = document.getElementById('orangeScores');
+const greenRounds = document.getElementById('greenRounds');
+const orangeRounds = document.getElementById('orangeRounds');
 
 // UX Overlays
 const waitingRoomOverlay = document.getElementById('waitingRoomOverlay');
@@ -210,18 +214,29 @@ incorrectBtn.addEventListener('click', () => socket.emit('judge', false));
 passBtn.addEventListener('click', () => socket.emit('pass_to_other'));
 skipBtn.addEventListener('click', () => socket.emit('skip_letter'));
 changeQuestionBtn.addEventListener('click', () => socket.emit('change_question'));
+resetGameBtn.addEventListener('click', () => {
+  if (confirm('هل أنت متأكد من رغبتك في تصفير اللعبة وإعادة توزيع الحروف؟')) {
+    socket.emit('reset_game');
+  }
+});
 
 // ─── Timer ───
 const TIMER_CIRCUMFERENCE = 2 * Math.PI * 52;
 
 function updateTimerCircle(circleEl, textEl) {
   if (!state || !state.timerEnd) return;
-  const remaining = Math.max(0, state.timerEnd - Date.now()) / 1000;
+  
+  // Calculate remaining time using synchronized clock
+  const nowAdjusted = Date.now() + serverOffset;
+  const remaining = Math.max(0, state.timerEnd - nowAdjusted) / 1000;
+  
   const fraction = remaining / 5;
   const offset = TIMER_CIRCUMFERENCE * (1 - fraction);
 
   circleEl.style.strokeDashoffset = offset;
-  textEl.textContent = Math.ceil(remaining);
+  
+  // Display numbers 5, 4, 3, 2, 1. If 0, keep as 1 or empty.
+  textEl.textContent = remaining > 0 ? Math.ceil(remaining) : '';
 
   circleEl.classList.remove('green', 'orange', 'danger');
   if (remaining <= 2) circleEl.classList.add('danger');
@@ -229,19 +244,29 @@ function updateTimerCircle(circleEl, textEl) {
   else circleEl.classList.add('green');
 }
 
+function updateAllTimers() {
+  document.querySelectorAll('.timer-progress').forEach(circle => {
+    const ring = circle.closest('.timer-ring');
+    if (!ring) return;
+    const textEl = ring.querySelector('.timer-text');
+    updateTimerCircle(circle, textEl);
+  });
+}
+
 function startTimerUI() {
-  stopTimerUI();
+  if (timerInterval) return; // Already running
   if (!state || !state.timerEnd) return;
+  
+  // Initial immediate update
+  updateAllTimers();
 
   timerInterval = setInterval(() => {
-    // Update all visible timer circles
-    document.querySelectorAll('.timer-progress').forEach(circle => {
-      const textEl = circle.closest('.timer-ring').querySelector('.timer-text');
-      updateTimerCircle(circle, textEl);
-    });
-
-    const remaining = Math.max(0, state.timerEnd - Date.now()) / 1000;
-    if (remaining <= 0) stopTimerUI();
+    updateAllTimers();
+    
+    const nowAdjusted = Date.now() + serverOffset;
+    if (state.timerEnd && nowAdjusted >= (state.timerEnd + 100)) {
+      stopTimerUI();
+    }
   }, 50);
 }
 
@@ -299,6 +324,7 @@ function renderReferee() {
   judgeControls.classList.toggle('hidden', state.phase !== 'ANSWERING' && state.phase !== 'REFEREE_DECISION');
   decisionControls.classList.toggle('hidden', state.phase !== 'REFEREE_DECISION');
   changeQuestionBtn.classList.toggle('hidden', state.phase !== 'BUZZING' && state.phase !== 'REFEREE_DECISION');
+  resetGameBtn.classList.toggle('hidden', state.phase === 'LOBBY');
 
   // Question Box
   const qBox = document.getElementById('questionBox');
@@ -423,7 +449,7 @@ function updateStatus() {
     }
     case 'REFEREE_DECISION': statusText.textContent = `⚖️ الحكم يقرر — تمرير أو تخطي؟`; break;
     case 'GAME_OVER': {
-      statusText.innerHTML = `🎉🎉 اللعبة انتهت! بطل حروف هو <b>الفريق ${tn(state.winner)}</b> 🎉🎉`;
+      statusText.innerHTML = `🎉🎉 المباراة انتهت! بطل حروف هو <b>الفريق ${tn(state.winner)}</b> بـ 3 انتصارات 🎉🎉`;
       break;
     }
   }
@@ -437,6 +463,9 @@ function updateScoreboard() {
   });
   greens.sort((a, b) => b.score - a.score);
   oranges.sort((a, b) => b.score - a.score);
+
+  greenRounds.textContent = `الانتصارات: ${state.roundWins.green}`;
+  orangeRounds.textContent = `الانتصارات: ${state.roundWins.orange}`;
 
   greenScores.innerHTML = greens.map(p =>
     `<div class="score-item"><span>${p.name}</span><span class="score-val">${p.score}</span></div>`
@@ -468,6 +497,11 @@ function showToast(msg, type = 'success') {
 socket.on('game_state', (newState) => {
   const oldPhase = state ? state.phase : null;
   state = newState;
+  
+  // Sync server clock
+  if (state.serverTime) {
+    serverOffset = state.serverTime - Date.now();
+  }
 
   if (oldPhase === 'ANSWERING' && state.phase === 'IDLE') showToast('إجابة صحيحة!', 'success');
   if (oldPhase === 'ANSWERING' && state.phase === 'REFEREE_DECISION') showToast('إجابة خاطئة', 'error');
