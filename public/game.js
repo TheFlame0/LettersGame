@@ -44,6 +44,7 @@ const passBtn = document.getElementById('passBtn');
 const skipBtn = document.getElementById('skipBtn');
 const changeQuestionBtn = document.getElementById('changeQuestionBtn');
 const resetGameBtn = document.getElementById('resetGameBtn');
+const undoCorrectBtn = document.getElementById('undoCorrectBtn');
 
 // Player
 const playerLamp = document.getElementById('playerLamp');
@@ -254,6 +255,35 @@ resetGameBtn.addEventListener('click', () => {
     socket.emit('reset_game');
   }
 });
+undoCorrectBtn.addEventListener('click', () => {
+  if (confirm('هل تريد سحب الاجابه؟')) {
+    socket.emit('undo_correct');
+  }
+});
+
+// ─── Buzz Sound (Web Audio API — works on all devices, no file needed) ───
+function playBuzzSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.setValueAtTime(600, ctx.currentTime + 0.1);
+    osc.frequency.setValueAtTime(800, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (e) { /* Audio not supported */ }
+}
+
+// Listen for buzz events from the server
+socket.on('buzz_alert', () => {
+  playBuzzSound();
+});
 
 // ─── Timer ───
 const TIMER_CIRCUMFERENCE = 2 * Math.PI * 52;
@@ -265,7 +295,7 @@ function updateTimerCircle(circleEl, textEl) {
   const nowAdjusted = Date.now() + serverOffset;
   const remaining = Math.max(0, state.timerEnd - nowAdjusted) / 1000;
   
-  const fraction = remaining / 5;
+  const fraction = remaining / 8;
   const offset = TIMER_CIRCUMFERENCE * (1 - fraction);
 
   circleEl.style.strokeDashoffset = offset;
@@ -360,6 +390,7 @@ function renderReferee() {
   decisionControls.classList.toggle('hidden', state.phase !== 'REFEREE_DECISION');
   changeQuestionBtn.classList.toggle('hidden', state.phase !== 'BUZZING' && state.phase !== 'REFEREE_DECISION');
   resetGameBtn.classList.toggle('hidden', state.phase === 'LOBBY');
+  undoCorrectBtn.classList.toggle('hidden', !state.canUndo || state.phase === 'LOBBY');
 
   // Question Box
   const qBox = document.getElementById('questionBox');

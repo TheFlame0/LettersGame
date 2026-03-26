@@ -457,6 +457,8 @@ body {
 .change-question-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5); }
 .reset-btn { background: linear-gradient(135deg, #2563eb, #3b82f6); box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3); width: 100%; margin-top: 20px; border: 1px solid rgba(255,255,255,0.1); }
 .reset-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5); border-color: rgba(255,255,255,0.3); }
+.undo-btn { background: linear-gradient(135deg, #d97706, #f59e0b); box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3); width: 100%; margin-top: 8px; border: 1px solid rgba(255,255,255,0.1); }
+.undo-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(217, 119, 6, 0.5); border-color: rgba(255,255,255,0.3); }
 
 /* ═══════ DISPLAY VIEW ═══════ */
 .display-layout {

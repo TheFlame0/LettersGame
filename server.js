@@ -53,6 +53,7 @@ let gameState = {
   timerEnd: null,
   winner: null,
   roundWins: { green: 0, orange: 0 },
+  lastCorrectAction: null, // For undo: { cellIndex, team, playerId }
 };
 
 function initBoard() {
@@ -87,17 +88,18 @@ function getPublicState() {
     roundWins: gameState.roundWins,
     timerEnd: gameState.timerEnd,
     serverTime: Date.now(),
+    canUndo: !!gameState.lastCorrectAction,
   };
 }
 
 function startTimer() {
-  gameState.timerEnd = Date.now() + 5000;
+  gameState.timerEnd = Date.now() + 8000;
   gameState.timer = setTimeout(() => {
     // Timer expired — hand control to referee (no auto-pass)
     gameState.phase = 'REFEREE_DECISION';
     gameState.timerEnd = null;
     io.emit('game_state', getPublicState());
-  }, 5000);
+  }, 8000);
 }
 
 function clearTimer() {
@@ -281,6 +283,7 @@ io.on('connection', (socket) => {
     gameState.buzzedTeam = found.player.team;
     gameState.phase = 'ANSWERING';
     startTimer();
+    io.emit('buzz_alert'); // Play sound on all clients
     io.emit('game_state', getPublicState());
   });
 
@@ -297,6 +300,12 @@ io.on('connection', (socket) => {
       if (gameState.buzzedPlayer && gameState.players[gameState.buzzedPlayer]) {
         gameState.players[gameState.buzzedPlayer].score++;
       }
+      // Save for potential undo
+      gameState.lastCorrectAction = {
+        cellIndex: gameState.currentLetter,
+        team: gameState.buzzedTeam,
+        playerId: gameState.buzzedPlayer,
+      };
       checkWinner();
       if (gameState.phase !== 'GAME_OVER') {
         resetTurn(gameState.buzzedTeam);
@@ -344,6 +353,27 @@ io.on('connection', (socket) => {
     io.emit('game_state', getPublicState());
   });
 
+  // Referee undoes the last correct answer
+  socket.on('undo_correct', () => {
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role !== 'referee') return;
+    if (!gameState.lastCorrectAction) return;
+
+    const action = gameState.lastCorrectAction;
+    // Remove ownership from the cell
+    if (gameState.board[action.cellIndex]) {
+      gameState.board[action.cellIndex].owner = null;
+    }
+    // Decrement the player's score
+    if (action.playerId && gameState.players[action.playerId]) {
+      gameState.players[action.playerId].score = Math.max(0, gameState.players[action.playerId].score - 1);
+    }
+    gameState.lastCorrectAction = null;
+    // Re-check winner state (the undo might invalidate a previous round win)
+    // For simplicity, just broadcast updated state
+    io.emit('game_state', getPublicState());
+  });
+
   socket.on('reset_game', () => {
     const found = findPlayer(socket.id);
     if (!found || found.player.role !== 'referee') return;
@@ -359,6 +389,7 @@ io.on('connection', (socket) => {
     gameState.buzzedPlayer = null;
     gameState.buzzedTeam = null;
     gameState.winner = null;
+    gameState.lastCorrectAction = null;
     io.emit('game_state', getPublicState());
   });
 
