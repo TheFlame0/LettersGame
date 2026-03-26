@@ -12,7 +12,22 @@ if (fs.existsSync(questionsFile)) {
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  pingInterval: 10000,   // Ping client every 10s
+  pingTimeout: 30000,    // Wait 30s before considering client dead
+});
+
+// Reverse lookup: socket.id -> playerId
+const socketToPlayer = {};
+
+// Helper: find player entry by socket.id
+function findPlayer(socketId) {
+  const playerId = socketToPlayer[socketId];
+  if (playerId && gameState.players[playerId]) {
+    return { playerId, player: gameState.players[playerId] };
+  }
+  return null;
+}
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -48,10 +63,21 @@ function initBoard() {
 }
 
 function getPublicState() {
+  // Strip socketId from player data before sending to clients
+  const safePlayers = {};
+  for (const [pid, p] of Object.entries(gameState.players)) {
+    safePlayers[pid] = {
+      name: p.name,
+      team: p.team,
+      role: p.role,
+      score: p.score,
+      connected: p.connected,
+    };
+  }
   return {
     phase: gameState.phase,
     board: gameState.board,
-    players: gameState.players,
+    players: safePlayers,
     currentLetter: gameState.currentLetter,
     currentQuestion: gameState.currentQuestion,
     currentTeam: gameState.currentTeam,
@@ -181,27 +207,49 @@ io.on('connection', (socket) => {
   // Send current state on connect
   socket.emit('game_state', getPublicState());
 
-  socket.on('join', ({ name, team, role }) => {
-    gameState.players[socket.id] = {
-      name,
-      team: (role === 'referee' || role === 'display') ? null : team,
-      role,
-      score: 0,
-    };
+  socket.on('join', ({ name, team, role, playerId }) => {
+    const resolvedTeam = (role === 'referee' || role === 'display') ? null : team;
+    
+    if (playerId && gameState.players[playerId]) {
+      // ── Reconnection: restore existing player ──
+      const existing = gameState.players[playerId];
+      existing.socketId = socket.id;
+      existing.connected = true;
+      // Update name/team/role in case they changed (unlikely but safe)
+      existing.name = name;
+      // Don't reset score!
+      socketToPlayer[socket.id] = playerId;
+      console.log(`🔄 Player reconnected: ${name} (${playerId})`);
+    } else {
+      // ── New player ──
+      const pid = playerId || `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      gameState.players[pid] = {
+        name,
+        team: resolvedTeam,
+        role,
+        score: 0,
+        socketId: socket.id,
+        connected: true,
+      };
+      socketToPlayer[socket.id] = pid;
+      // Tell the client their assigned playerId
+      socket.emit('assigned_id', pid);
+      console.log(`🆕 New player joined: ${name} (${pid})`);
+    }
     io.emit('game_state', getPublicState());
   });
 
   socket.on('start_game', () => {
-    const p = gameState.players[socket.id];
-    if (!p || p.role !== 'referee') return;
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role !== 'referee') return;
     gameState.phase = 'IDLE';
     gameState.currentTeam = Math.random() < 0.5 ? 'green' : 'orange';
     io.emit('game_state', getPublicState());
   });
 
   socket.on('select_letter', (index) => {
-    const p = gameState.players[socket.id];
-    if (!p || p.role !== 'referee') return;
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role !== 'referee') return;
     if (index < 0 || index >= 25 || gameState.board[index].owner) return;
 
     // De-select: click same letter again or click during BUZZING
@@ -227,24 +275,25 @@ io.on('connection', (socket) => {
 
   socket.on('buzz', () => {
     if (gameState.phase !== 'BUZZING') return;
-    const p = gameState.players[socket.id];
-    if (!p || p.role === 'referee') return;
-    gameState.buzzedPlayer = socket.id;
-    gameState.buzzedTeam = p.team;
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role === 'referee') return;
+    gameState.buzzedPlayer = found.playerId; // Store persistent ID
+    gameState.buzzedTeam = found.player.team;
     gameState.phase = 'ANSWERING';
     startTimer();
     io.emit('game_state', getPublicState());
   });
 
   socket.on('judge', (correct) => {
-    const p = gameState.players[socket.id];
-    if (!p || p.role !== 'referee') return;
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role !== 'referee') return;
     if (gameState.phase !== 'ANSWERING' && gameState.phase !== 'REFEREE_DECISION') return;
 
     clearTimer();
 
     if (correct) {
       gameState.board[gameState.currentLetter].owner = gameState.buzzedTeam;
+      // buzzedPlayer is now a playerId, not socket.id
       if (gameState.buzzedPlayer && gameState.players[gameState.buzzedPlayer]) {
         gameState.players[gameState.buzzedPlayer].score++;
       }
@@ -262,8 +311,8 @@ io.on('connection', (socket) => {
 
   // Referee passes the question to the other team
   socket.on('pass_to_other', () => {
-    const p = gameState.players[socket.id];
-    if (!p || p.role !== 'referee') return;
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role !== 'referee') return;
     if (gameState.phase !== 'REFEREE_DECISION') return;
 
     gameState.buzzedTeam = gameState.buzzedTeam === 'green' ? 'orange' : 'green';
@@ -275,8 +324,8 @@ io.on('connection', (socket) => {
 
   // Referee skips the letter entirely (no team wins it)
   socket.on('skip_letter', () => {
-    const p = gameState.players[socket.id];
-    if (!p || p.role !== 'referee') return;
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role !== 'referee') return;
     if (gameState.phase !== 'REFEREE_DECISION') return;
 
     resetTurn(); // no winner, flip turn
@@ -285,8 +334,8 @@ io.on('connection', (socket) => {
 
   // Referee changes the question for the current letter
   socket.on('change_question', () => {
-    const p = gameState.players[socket.id];
-    if (!p || p.role !== 'referee') return;
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role !== 'referee') return;
     if (!gameState.currentLetter && gameState.currentLetter !== 0) return;
 
     const letterChar = gameState.board[gameState.currentLetter].letter;
@@ -296,12 +345,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('reset_game', () => {
-    const p = gameState.players[socket.id];
-    if (!p || p.role !== 'referee') return;
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role !== 'referee') return;
     clearTimer();
     initBoard();
-    // Reset scores
-    // Reset all
+    // Reset scores but keep players
     Object.values(gameState.players).forEach(pl => pl.score = 0);
     gameState.roundWins = { green: 0, orange: 0 };
     gameState.phase = 'LOBBY';
@@ -311,12 +359,18 @@ io.on('connection', (socket) => {
     gameState.buzzedPlayer = null;
     gameState.buzzedTeam = null;
     gameState.winner = null;
-    initBoard();
     io.emit('game_state', getPublicState());
   });
 
   socket.on('disconnect', () => {
-    delete gameState.players[socket.id];
+    // Mark player offline instead of deleting
+    const found = findPlayer(socket.id);
+    if (found) {
+      found.player.connected = false;
+      found.player.socketId = null;
+      console.log(`📴 Player disconnected: ${found.player.name} (${found.playerId})`);
+    }
+    delete socketToPlayer[socket.id];
     io.emit('game_state', getPublicState());
   });
 });

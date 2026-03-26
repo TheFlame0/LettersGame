@@ -2,12 +2,20 @@
 //  حروف - Letters Game Client
 // ═══════════════════════════════════════════
 
-const socket = io();
+// Aggressive reconnection config — keeps players connected
+const socket = io({
+  reconnection: true,
+  reconnectionAttempts: Infinity,  // Never give up
+  reconnectionDelay: 500,          // Start retrying after 500ms
+  reconnectionDelayMax: 3000,      // Max 3s between retry attempts
+  timeout: 30000,                  // 30s connection timeout
+});
 
 let myInfo = null;
 let state = null;
 let timerInterval = null;
-let serverOffset = 0; // ms difference between server and client clock
+let serverOffset = 0;
+let myPlayerId = localStorage.getItem('lettersGamePlayerId') || null;
 
 // ─── DOM ───
 const lobbyScreen = document.getElementById('lobby');
@@ -161,11 +169,37 @@ function buildBoardSVG(svgEl, clickable) {
 function joinGame(name, team, role) {
   myInfo = { name: name || 'شاشة العرض', team, role };
   localStorage.setItem('lettersGameUser', JSON.stringify(myInfo));
-  socket.emit('join', myInfo);
+  socket.emit('join', { ...myInfo, playerId: myPlayerId });
   lobbyScreen.classList.add('hidden');
   gameScreen.classList.remove('hidden');
   render();
 }
+
+// Server assigns a persistent ID on first join
+socket.on('assigned_id', (id) => {
+  myPlayerId = id;
+  localStorage.setItem('lettersGamePlayerId', id);
+});
+
+// Auto-rejoin when socket reconnects after a drop
+socket.on('connect', () => {
+  if (myInfo) {
+    // Re-send join with persistent ID to restore session
+    socket.emit('join', { ...myInfo, playerId: myPlayerId });
+  }
+});
+
+// Wake-up detection: when screen wakes, force reconnect if needed
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && myInfo) {
+    if (!socket.connected) {
+      socket.connect(); // Force reconnect attempt
+    } else {
+      // Already connected but might be stale — re-join to be safe
+      socket.emit('join', { ...myInfo, playerId: myPlayerId });
+    }
+  }
+});
 
 document.querySelectorAll('.role-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -203,6 +237,7 @@ const leaveBtn = document.getElementById('leaveBtn');
 if (leaveBtn) {
   leaveBtn.addEventListener('click', () => {
     localStorage.removeItem('lettersGameUser');
+    localStorage.removeItem('lettersGamePlayerId');
     window.location.reload(); // Reload cleans state and puts user back in lobby
   });
 }
