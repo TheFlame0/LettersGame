@@ -78,8 +78,10 @@ const toastNotification = document.getElementById('toastNotification');
 const toastIcon = document.getElementById('toastIcon');
 const toastMessage = document.getElementById('toastMessage');
 
-// 5x5 slanted block = 25 letters
-const BOARD_LAYOUT = [5, 5, 5, 5, 5];
+// Settings DOM
+const settingsPanel = document.getElementById('settingsPanel');
+const timerBlocks = document.getElementById('timerBlocks');
+const gridBlocks = document.getElementById('gridBlocks');
 
 const HEX_SIZE = 44;
 const HEX_W = Math.sqrt(3) * HEX_SIZE;
@@ -99,23 +101,23 @@ function buildBoardSVG(svgEl, clickable) {
   svgEl.innerHTML = '';
   if (!state) return;
 
-  const totalW = 8.5 * COL_STEP;
-  const totalH = 7 * ROW_STEP + HEX_SIZE + 40;
+  const size = state.gameSettings ? state.gameSettings.gridSize : 5;
+
+  const totalW = (size + 3.5) * COL_STEP;
+  const totalH = (size + 2) * ROW_STEP + HEX_SIZE + 40;
   svgEl.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
 
   let cellIndex = 0;
 
-  for (let r = -1; r <= 5; r++) {
-    const isOffsetRow = Math.abs(r) % 2 === 1; // Alternating rows are shifted right
-
-    // Base X offset + shift for odd rows
+  for (let r = -1; r <= size; r++) {
+    const isOffsetRow = Math.abs(r) % 2 === 1;
     const offsetX = COL_STEP + (isOffsetRow ? COL_STEP / 2 : 0) + 10;
 
-    for (let c = -1; c <= 5; c++) {
+    for (let c = -1; c <= size; c++) {
       const cx = offsetX + (c + 1) * COL_STEP;
       const cy = HEX_SIZE + 20 + (r + 1) * ROW_STEP;
 
-      const isPlayable = (r >= 0 && r < 5 && c >= 0 && c < 5);
+      const isPlayable = (r >= 0 && r < size && c >= 0 && c < size);
 
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g.setAttribute('class', 'hex-cell');
@@ -133,7 +135,6 @@ function buildBoardSVG(svgEl, clickable) {
 
         if (state.currentLetter === cellIndex && state.phase !== 'GAME_OVER') g.classList.add('selected');
 
-        // Referee can click unowned cells during IDLE, or click selected cell to deselect during BUZZING
         const canClick = clickable && !cell.owner && (state.phase === 'IDLE' || (state.phase === 'BUZZING' && state.currentLetter === cellIndex));
         if (canClick && state.phase !== 'GAME_OVER') g.classList.add('clickable');
 
@@ -151,12 +152,10 @@ function buildBoardSVG(svgEl, clickable) {
         }
         cellIndex++;
       } else {
-        // Border Hexes
-        // User requested: Left/Right = Green, Top/Bottom = Orange.
-        g.classList.add('border-hex'); // specific styling if needed
-        if (c === -1 || c === 5) {
+        g.classList.add('border-hex');
+        if (c === -1 || c === size) {
           g.classList.add('owner-green');
-        } else if (r === -1 || r === 5) {
+        } else if (r === -1 || r === size) {
           g.classList.add('owner-orange');
         }
       }
@@ -255,6 +254,18 @@ resetGameBtn.addEventListener('click', () => {
     socket.emit('reset_game');
   }
 });
+
+// Settings block click handlers
+timerBlocks.querySelectorAll('.setting-block').forEach(btn => {
+  btn.addEventListener('click', () => {
+    socket.emit('update_settings', { timerSeconds: parseInt(btn.dataset.value) });
+  });
+});
+gridBlocks.querySelectorAll('.setting-block').forEach(btn => {
+  btn.addEventListener('click', () => {
+    socket.emit('update_settings', { gridSize: parseInt(btn.dataset.value) });
+  });
+});
 undoCorrectBtn.addEventListener('click', () => {
   if (confirm('هل تريد سحب الاجابه؟')) {
     socket.emit('undo_correct');
@@ -295,7 +306,8 @@ function updateTimerCircle(circleEl, textEl) {
   const nowAdjusted = Date.now() + serverOffset;
   const remaining = Math.max(0, state.timerEnd - nowAdjusted) / 1000;
   
-  const fraction = remaining / 8;
+  const timerSecs = state.gameSettings ? state.gameSettings.timerSeconds : 7;
+  const fraction = remaining / timerSecs;
   const offset = TIMER_CIRCUMFERENCE * (1 - fraction);
 
   circleEl.style.strokeDashoffset = offset;
@@ -386,11 +398,22 @@ function renderReferee() {
 
   // Controls visibility
   startGameBtn.classList.toggle('hidden', state.phase !== 'LOBBY');
+  settingsPanel.classList.toggle('hidden', state.phase !== 'LOBBY');
   judgeControls.classList.toggle('hidden', state.phase !== 'ANSWERING' && state.phase !== 'REFEREE_DECISION');
   decisionControls.classList.toggle('hidden', state.phase !== 'REFEREE_DECISION');
   changeQuestionBtn.classList.toggle('hidden', state.phase !== 'BUZZING' && state.phase !== 'REFEREE_DECISION');
   resetGameBtn.classList.toggle('hidden', state.phase === 'LOBBY');
   undoCorrectBtn.classList.toggle('hidden', !state.canUndo || state.phase === 'LOBBY');
+
+  // Sync setting blocks with server state
+  if (state.gameSettings) {
+    timerBlocks.querySelectorAll('.setting-block').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.value) === state.gameSettings.timerSeconds);
+    });
+    gridBlocks.querySelectorAll('.setting-block').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.value) === state.gameSettings.gridSize);
+    });
+  }
 
   // Question Box
   const qBox = document.getElementById('questionBox');
@@ -570,7 +593,13 @@ socket.on('game_state', (newState) => {
   }
 
   if (oldPhase === 'ANSWERING' && state.phase === 'IDLE') showToast('إجابة صحيحة!', 'success');
-  if (oldPhase === 'ANSWERING' && state.phase === 'REFEREE_DECISION') showToast('إجابة خاطئة', 'error');
+  if (oldPhase === 'ANSWERING' && state.phase === 'REFEREE_DECISION') {
+    if (!state.timerEnd) {
+      showToast('⏰ انتهى الوقت، لم يتم الاجابه', 'error');
+    } else {
+      showToast('إجابة خاطئة', 'error');
+    }
+  }
 
   if (myInfo) render();
   renderLobbyPlayers(state.players);

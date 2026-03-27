@@ -195,6 +195,28 @@ body {
   flex: 1;
 }
 
+/* Referee: side-by-side on wider screens */
+#refereeView {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  direction: ltr;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 30px;
+  gap: 30px;
+}
+#refereeView .board-section {
+  order: 1;
+  flex: 1;
+  direction: rtl;
+}
+#refereeView .controls-section {
+  order: 2;
+  direction: rtl;
+}
+
 /* ═══════ BOARD (shared by referee & display) ═══════ */
 .board-section {
   display: flex;
@@ -421,6 +443,8 @@ body {
   padding: 16px 20px 30px;
   width: 100%;
   max-width: 500px;
+  overflow-y: auto;
+  flex-shrink: 0;
 }
 
 .referee-controls {
@@ -459,6 +483,59 @@ body {
 .reset-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5); border-color: rgba(255,255,255,0.3); }
 .undo-btn { background: linear-gradient(135deg, #d97706, #f59e0b); box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3); width: 100%; margin-top: 8px; border: 1px solid rgba(255,255,255,0.1); }
 .undo-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(217, 119, 6, 0.5); border-color: rgba(255,255,255,0.3); }
+
+.settings-panel {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 12px;
+}
+.settings-panel h3 {
+  margin: 0 0 14px 0;
+  font-size: 1rem;
+  color: var(--text);
+  text-align: center;
+}
+.setting-group {
+  margin-bottom: 12px;
+}
+.setting-group label {
+  display: block;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+  text-align: center;
+}
+.setting-blocks {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.setting-block {
+  flex: 1;
+  padding: 10px 4px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+.setting-block:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.25);
+  color: var(--text);
+}
+.setting-block.active {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border-color: #818cf8;
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.4);
+}
 
 /* ═══════ DISPLAY VIEW ═══════ */
 .display-layout {
@@ -583,7 +660,6 @@ body {
   .hex-board-large { max-height: 65vh; width: auto; max-width: 45vw; }
   .board-section { flex: 1; min-width: 50%; padding: 5px; }
   .controls-section { flex: 1; max-width: none; padding: 10px; justify-content: center; }
-  .view-container#refereeView { flex-direction: row; align-items: stretch; justify-content: center; padding: 0 10px; }
   .view-container#displayView .display-layout { flex-direction: row; flex-wrap: wrap; justify-content: space-evenly; align-items: flex-start; }
   .display-bottom { flex-direction: column; gap: 10px; margin-top: 20px; }
   .scoreboard { width: 100%; max-width: 100%; flex-direction: row; margin-top: 10px; }
@@ -596,6 +672,7 @@ body {
 
 /* Mobile Devices (Portrait) */
 @media (max-width: 767px) and (orientation: portrait) {
+  #refereeView { flex-direction: column; overflow-y: auto; }
   .lobby-container { padding: 20px 10px; }
   .logo-letter { font-size: 52px; }
   .role-btn { padding: 12px; font-size: 16px; }

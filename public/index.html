@@ -90,6 +90,27 @@
         <div id="refereeControls" class="referee-controls">
           <button id="startGameBtn" class="ref-btn start-btn">🎮 ابدأ اللعبة</button>
 
+          <!-- Settings panel (LOBBY only) -->
+          <div id="settingsPanel" class="settings-panel">
+            <h3>⚙️ إعدادات اللعبة</h3>
+            <div class="setting-group">
+              <label>⏱ مدة الإجابة</label>
+              <div class="setting-blocks" id="timerBlocks">
+                <button class="setting-block" data-value="5">5 ثوانٍ</button>
+                <button class="setting-block active" data-value="7">7 ثوانٍ</button>
+              </div>
+            </div>
+            <div class="setting-group">
+              <label>📐 حجم اللوحة</label>
+              <div class="setting-blocks" id="gridBlocks">
+                <button class="setting-block" data-value="4">4×4</button>
+                <button class="setting-block active" data-value="5">5×5</button>
+                <button class="setting-block" data-value="6">6×6</button>
+                <button class="setting-block" data-value="7">7×7</button>
+              </div>
+            </div>
+          </div>
+
           <!-- During ANSWERING: Correct / Wrong -->
           <div id="judgeControls" class="judge-controls hidden">
             <button id="correctBtn" class="ref-btn correct-btn">✅ صحيحة</button>

@@ -53,14 +53,20 @@ let gameState = {
   timerEnd: null,
   winner: null,
   roundWins: { green: 0, orange: 0 },
-  lastCorrectAction: null, // For undo: { cellIndex, team, playerId }
+  lastCorrectAction: null,
+  gameSettings: { timerSeconds: 7, gridSize: 5 },
 };
 
 function initBoard() {
+  const size = gameState.gameSettings.gridSize;
+  const totalCells = size * size;
   const shuffled = [...ARABIC_LETTERS].sort(() => Math.random() - 0.5);
-  // Pick exactly 25 letters for a 5x5 grid
-  const selectedLetters = shuffled.slice(0, 25);
-  gameState.board = selectedLetters.map((letter, i) => ({ letter, owner: null, index: i }));
+  // If grid needs more than 28 letters, cycle through them
+  const letters = [];
+  for (let i = 0; i < totalCells; i++) {
+    letters.push(shuffled[i % shuffled.length]);
+  }
+  gameState.board = letters.map((letter, i) => ({ letter, owner: null, index: i }));
 }
 
 function getPublicState() {
@@ -89,17 +95,19 @@ function getPublicState() {
     timerEnd: gameState.timerEnd,
     serverTime: Date.now(),
     canUndo: !!gameState.lastCorrectAction,
+    gameSettings: gameState.gameSettings,
   };
 }
 
 function startTimer() {
-  gameState.timerEnd = Date.now() + 8000;
+  const ms = gameState.gameSettings.timerSeconds * 1000;
+  gameState.timerEnd = Date.now() + ms;
   gameState.timer = setTimeout(() => {
     // Timer expired — hand control to referee (no auto-pass)
     gameState.phase = 'REFEREE_DECISION';
     gameState.timerEnd = null;
     io.emit('game_state', getPublicState());
-  }, 8000);
+  }, ms);
 }
 
 function clearTimer() {
@@ -128,27 +136,26 @@ function resetTurn(winnerTeam = null) {
 }
 
 function checkWinner() {
+  const size = gameState.gameSettings.gridSize;
+  
   const getNeighbors = (r, c) => {
     const neighbors = [[r, c - 1], [r, c + 1]];
-    if (Math.abs(r) % 2 === 0) { // even row (0, 2, 4)
+    if (Math.abs(r) % 2 === 0) {
       neighbors.push([r - 1, c - 1], [r - 1, c], [r + 1, c - 1], [r + 1, c]);
-    } else { // odd row (1, 3)
+    } else {
       neighbors.push([r - 1, c], [r - 1, c + 1], [r + 1, c], [r + 1, c + 1]);
     }
-    return neighbors.filter(([nr, nc]) => nr >= 0 && nr < 5 && nc >= 0 && nc < 5);
+    return neighbors.filter(([nr, nc]) => nr >= 0 && nr < size && nc >= 0 && nc < size);
   };
 
   const hasPath = (team, isWinNode) => {
-    // Collect starting nodes
     let queue = [];
     let visited = new Set();
     
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 5; c++) {
-        const idx = r * 5 + c;
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const idx = r * size + c;
         if (gameState.board[idx].owner === team) {
-          // Green starts from column 0 (Left)
-          // Orange starts from row 0 (Top)
           if ((team === 'green' && c === 0) || (team === 'orange' && r === 0)) {
             queue.push([r, c]);
             visited.add(`${r},${c}`);
@@ -159,12 +166,10 @@ function checkWinner() {
 
     while (queue.length > 0) {
       const [r, c] = queue.shift();
-      
-      // Check if we hit the winning opposite side
       if (isWinNode(r, c)) return true;
 
       for (const [nr, nc] of getNeighbors(r, c)) {
-        const nIdx = nr * 5 + nc;
+        const nIdx = nr * size + nc;
         if (gameState.board[nIdx].owner === team) {
           const key = `${nr},${nc}`;
           if (!visited.has(key)) {
@@ -178,9 +183,9 @@ function checkWinner() {
   };
 
   let roundWinner = null;
-  if (hasPath('green', (r, c) => c === 4)) {
+  if (hasPath('green', (r, c) => c === size - 1)) {
     roundWinner = 'green';
-  } else if (hasPath('orange', (r, c) => r === 4)) {
+  } else if (hasPath('orange', (r, c) => r === size - 1)) {
     roundWinner = 'orange';
   }
 
@@ -241,9 +246,26 @@ io.on('connection', (socket) => {
     io.emit('game_state', getPublicState());
   });
 
+  // Referee changes game settings (only in LOBBY)
+  socket.on('update_settings', (settings) => {
+    const found = findPlayer(socket.id);
+    if (!found || found.player.role !== 'referee') return;
+    if (gameState.phase !== 'LOBBY') return;
+
+    if (settings.timerSeconds && [5, 7].includes(settings.timerSeconds)) {
+      gameState.gameSettings.timerSeconds = settings.timerSeconds;
+    }
+    if (settings.gridSize && [4, 5, 6, 7].includes(settings.gridSize)) {
+      gameState.gameSettings.gridSize = settings.gridSize;
+      initBoard(); // Regenerate board with new size
+    }
+    io.emit('game_state', getPublicState());
+  });
+
   socket.on('start_game', () => {
     const found = findPlayer(socket.id);
     if (!found || found.player.role !== 'referee') return;
+    initBoard(); // Ensure board matches current settings
     gameState.phase = 'IDLE';
     gameState.currentTeam = Math.random() < 0.5 ? 'green' : 'orange';
     io.emit('game_state', getPublicState());
@@ -252,7 +274,7 @@ io.on('connection', (socket) => {
   socket.on('select_letter', (index) => {
     const found = findPlayer(socket.id);
     if (!found || found.player.role !== 'referee') return;
-    if (index < 0 || index >= 25 || gameState.board[index].owner) return;
+    if (index < 0 || index >= gameState.board.length || gameState.board[index].owner) return;
 
     // De-select: click same letter again or click during BUZZING
     if (gameState.phase === 'BUZZING' || (gameState.phase === 'IDLE' && gameState.currentLetter === index)) {
@@ -283,7 +305,13 @@ io.on('connection', (socket) => {
     gameState.buzzedTeam = found.player.team;
     gameState.phase = 'ANSWERING';
     startTimer();
-    io.emit('buzz_alert'); // Play sound on all clients
+    // Play buzz sound only on: buzzer's phone, referees, and display screens
+    socket.emit('buzz_alert'); // The buzzer themselves
+    for (const [pid, p] of Object.entries(gameState.players)) {
+      if ((p.role === 'referee' || p.role === 'display') && p.connected && p.socketId) {
+        io.to(p.socketId).emit('buzz_alert');
+      }
+    }
     io.emit('game_state', getPublicState());
   });
 
